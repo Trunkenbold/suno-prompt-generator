@@ -32,14 +32,18 @@ ENV/
 .vscode/
 *.swp
 *.swo
+*.swn
+*.bak
+*.code-workspace
 
 # Project specific
-.suno_prompt_autosave.json
 .suno_prompt_gui_config.json
+.suno_prompt_autosave.json
 *.pdf
 *.txt
 !requirements.txt
 
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+desktop.ini 
