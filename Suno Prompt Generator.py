@@ -7,6 +7,7 @@ import pathlib
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import webbrowser
+import re
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -1227,6 +1228,7 @@ Suno Prompt Generator - Help
 - Albumtitel: "Sommerträume"
 - Beschreibung: "Eine Reise durch die verschiedenen Facetten des Sommers, von erfrischenden Morgentönen bis zu warmen Abendklängen."
 - Tracktitel: ["Morgentau", "Sonnenschein", "Abendbrisen", ...]
+- Inspiration: [inspiration] (z.B. John Lennon's Songwriting, David Bowie's Experimentierfreude)
 """)
         output_phase1.append("\n## Grundlegende Informationen")
         output_phase1.append(f"- Anzahl der Tracks: {num_tracks}")
@@ -1804,28 +1806,42 @@ Suno Prompt Generator - Help
 - Albumtitel: "Sommerträume"
 - Beschreibung: "Eine Reise durch die verschiedenen Facetten des Sommers, von erfrischenden Morgentönen bis zu warmen Abendklängen."
 - Tracktitel: ["Morgentau", "Sonnenschein", "Abendbrisen", ...]
+- Inspiration: [inspiration] (z.B. John Lennon's Songwriting, David Bowie's Experimentierfreude)
 """)
-        output_phase1.append(f"\n## {self.t('prompt_basic_info')}")
-        output_phase1.append(f"- {self.t('prompt_tracks')} {num_tracks}")
-        output_phase1.append(f"- {self.t('prompt_lyrics_lang')} {language}")
-        output_phase1.append(f"- {self.t('prompt_narrative')} {narrative}\n")
-        output_phase1.append(f"## {self.t('prompt_music_style')}")
-        output_phase1.append(f"### {self.t('prompt_main_style')}")
+        output_phase1.append("\n## Grundlegende Informationen")
+        output_phase1.append(f"- Anzahl der Tracks: {num_tracks}")
+        output_phase1.append(f"- Lyrics Sprache: {language}")
+        output_phase1.append(f"- Narrative Overview: {narrative}\n")
+        output_phase1.append("## Musikstil")
+        output_phase1.append("### Hauptstil")
         output_phase1.append("```style")
         output_phase1.append(global_style)
         output_phase1.append("```\n")
-        output_phase1.append(f"### {self.t('prompt_excluded_styles')}")
+        output_phase1.append("### Ausgeschlossene Stile")
         output_phase1.append("```excludes")
-        output_phase1.append(global_exclude if global_exclude else self.t('prompt_empty'))
+        output_phase1.append(global_exclude if global_exclude else "[leer]")
         output_phase1.append("```\n")
-        output_phase1.append(self.t('prompt_ki_generate'))
-        output_phase1.append(self.t('prompt_ki_wait'))
+        output_phase1.append("\n[KI: Bitte generiere nun:]")
+        output_phase1.append("1. Einen passenden Albumtitel")
+        output_phase1.append("2. Einen passenden Titel für jeden Track")
+        output_phase1.append("3. Eine kurze Beschreibung des Albums (2-3 Sätze)")
+        output_phase1.append("\n[KI: Warte nach der Generierung auf Bestätigung, bevor du fortfährst.]\n")
         
         # Phase 2: Track-Details
         output_phase2 = []
-        output_phase2.append(f"# {self.t('prompt_phase2')}\n")
-        output_phase2.append(self.t('prompt_track_steps'))
-        output_phase2.append(self.t('prompt_track_example'))
+        output_phase2.append("# PHASE 2: Track-Details\n")
+        output_phase2.append("""
+[KI: Bitte folge diesen Schritten für jeden Track:
+1. Generiere passende Lyrics zur Sprache und zum Stil
+2. Beachte die Stilvorgaben in der angegebenen Priorität
+3. Stelle sicher, dass die Lyrics zur Stimmung passen
+4. Warte auf Bestätigung nach jedem Track]
+
+### Beispiel für einen guten Track:
+- Titel: "Morgentau"
+- Lyrics: [Passende Lyrics zur Stimmung]
+- Style: [Klar definierter Stil mit allen Details]
+""")
         
         for i, track in enumerate(self.track_data, 1):
             track_title = track["title"]
@@ -1861,20 +1877,24 @@ Suno Prompt Generator - Help
             output_phase2.append(self.t('prompt_lyrics_limit'))
             output_phase2.append(self.t('prompt_ki_important'))
             output_phase2.append("```lyrics")
-            output_phase2.append("[Intro]")
-            output_phase2.append("[Verse 1]")
-            output_phase2.append("[Pre-Chorus]")
-            output_phase2.append("[Chorus]")
-            output_phase2.append("[Verse 2]")
-            output_phase2.append("[Bridge]")
-            output_phase2.append("[Chorus]")
-            output_phase2.append("[Outro]")
+            lyrics_template = """
+[Intro]
+[Verse 1]
+[Pre-Chorus]
+[Chorus]
+[Verse 2]
+[Bridge]
+[Chorus]
+[Outro]
+"""
+            output_phase2.append(validate_lyrics_format(lyrics_template))
             output_phase2.append("```\n")
         
         # Kombiniere die Phasen
         output = output_phase1 + output_phase2
         
-        return "\n".join(output)
+        prompt_text = "\n".join(output)
+        return replace_parentheses_outside_lyrics(prompt_text)
 
     def apply_global_style_to_tracks(self, event=None):
         """Wendet den globalen Stil auf alle Tracks an."""
@@ -1896,6 +1916,140 @@ Suno Prompt Generator - Help
                     exclude_entry.delete(0, 'end')
                     exclude_entry.insert(0, global_exclude)
         self.autosave()
+
+def replace_parentheses_outside_lyrics(prompt_text: str) -> str:
+    """
+    Ersetzt alle runden Klammern außerhalb von Songtext-Blöcken (```lyrics ... ```)
+    durch eckige Klammern. Songtext-Blöcke bleiben unverändert.
+    """
+    # Splitte den Prompt in Abschnitte, getrennt durch ```lyrics ... ```
+    parts = re.split(r'(```lyrics[\s\S]*?```)', prompt_text)
+    for i in range(len(parts)):
+        # Nur außerhalb von Songtext-Blöcken ersetzen (gerade Indizes)
+        if i % 2 == 0:
+            # Ersetze (text) durch [text], aber nur wenn es kein Markdown-Link ist
+            parts[i] = re.sub(r'\(([^\)\[]+)\)', r'[\1]', parts[i])
+    return ''.join(parts)
+
+def validate_lyrics_format(lyrics_text: str) -> str:
+    """
+    Validiert und korrigiert das Format von Songtexten:
+    - Ersetzt runde Klammern () durch eckige Klammern []
+    - Stellt sicher, dass alle Anweisungen/Effekte in eckigen Klammern stehen
+    - Validiert Bandnamen
+    """
+    # Ersetze alle runden Klammern durch eckige
+    lyrics_text = re.sub(r'\(([^\)]+)\)', r'[\1]', lyrics_text)
+    
+    # Validiere Bandnamen
+    lyrics_text = validate_band_names(lyrics_text)
+    
+    # Liste von typischen Anweisungen/Effekten
+    instructions = [
+        # Gesang und Stimme
+        'singen', 'sprechen', 'flüstern', 'schreien', 'weinen', 'lachen',
+        'atmen', 'seufzen', 'stöhnen', 'jubeln', 'jammern', 'klagen',
+        'schreien', 'brüllen', 'heulen', 'schluchzen', 'giggeln', 'kichern',
+        'grunzen', 'knurren', 'zischen', 'pfeifen', 'summen', 'brummen',
+        'murmeln', 'raunen', 'tuscheln', 'flüstern', 'schreien', 'brüllen',
+        'heulen', 'schluchzen', 'giggeln', 'kichern', 'grunzen', 'knurren',
+        'zischen', 'pfeifen', 'summen', 'brummen', 'murmeln', 'raunen',
+        'tuscheln', 'flüstern', 'schreien', 'brüllen', 'heulen', 'schluchzen',
+        
+        # Instrumente und Soli
+        'gitarrensolo', 'pianosolo', 'saxophonsolo', 'trompetensolo',
+        'schlagzeugsolo', 'basssolo', 'violinsolo', 'cellosolo',
+        'flötensolo', 'klarinettensolo', 'trommelwirbel', 'trompetenfanfare',
+        'gitarrenriff', 'bassriff', 'synthriff', 'keyboardriff',
+        'drumfill', 'drumbreak', 'drumroll', 'drumbeat',
+        
+        # Soundeffekte
+        'echo', 'reverb', 'delay', 'distortion', 'fuzz', 'wahwah',
+        'phaser', 'flanger', 'chorus', 'tremolo', 'vibrato',
+        'feedback', 'noise', 'static', 'crackle', 'pop',
+        'scratch', 'vinyl', 'tape', 'lo-fi', 'hi-fi',
+        
+        # Rhythmus und Beat
+        'beat', 'rhythm', 'groove', 'swing', 'shuffle',
+        'waltz', 'march', 'samba', 'bossa', 'tango',
+        'breakbeat', 'drumbeat', 'backbeat', 'offbeat',
+        'syncopation', 'polyrhythm', 'cross-rhythm',
+        
+        # Dynamik und Tempo
+        'crescendo', 'decrescendo', 'forte', 'piano',
+        'fortissimo', 'pianissimo', 'accelerando', 'ritardando',
+        'rubato', 'tempo', 'speed', 'slow', 'fast',
+        
+        # Stimmung und Atmosphäre
+        'dramatic', 'mysterious', 'romantic', 'tragic',
+        'happy', 'sad', 'angry', 'peaceful', 'tense',
+        'relaxed', 'energetic', 'calm', 'chaotic',
+        
+        # Chor und Ensemble
+        'chorus', 'choir', 'ensemble', 'harmony',
+        'unison', 'counterpoint', 'polyphony', 'homophony',
+        'call-and-response', 'round', 'canon', 'fugue',
+        
+        # Technische Anweisungen
+        'fade-in', 'fade-out', 'crossfade', 'mix',
+        'overdub', 'layering', 'panning', 'stereo',
+        'mono', 'surround', 'spatial', 'ambient',
+        
+        # Genre-spezifische Elemente
+        'breakdown', 'drop', 'build-up', 'drop-out',
+        'bridge', 'outro', 'intro', 'verse', 'chorus',
+        'hook', 'riff', 'lick', 'fill', 'break',
+        
+        # Emotionale und expressive Elemente
+        'passionate', 'intense', 'gentle', 'powerful',
+        'delicate', 'rough', 'smooth', 'harsh', 'soft',
+        'loud', 'quiet', 'whisper', 'shout', 'cry',
+        
+        # Spezielle Effekte
+        'reverb', 'delay', 'echo', 'distortion',
+        'fuzz', 'wah-wah', 'phaser', 'flanger',
+        'chorus', 'tremolo', 'vibrato', 'feedback',
+        'noise', 'static', 'crackle', 'pop',
+        
+        # Akustische Elemente
+        'acoustic', 'electric', 'electronic', 'digital',
+        'analog', 'synthetic', 'organic', 'natural',
+        'artificial', 'mechanical', 'industrial',
+        
+        # Performance-Anweisungen
+        'live', 'studio', 'concert', 'recording',
+        'rehearsal', 'soundcheck', 'soundcheck',
+        'monitoring', 'mixing', 'mastering',
+        
+        # Spezielle Techniken
+        'looping', 'sampling', 'sequencing', 'programming',
+        'arranging', 'orchestrating', 'composing', 'improvising',
+        'jamming', 'soloing', 'accompanying', 'backing'
+    ]
+    
+    # Ersetze alle Anweisungen, die nicht in eckigen Klammern stehen
+    for instruction in instructions:
+        pattern = r'(?<![\[\w])' + re.escape(instruction) + r'(?![\]\w])'
+        lyrics_text = re.sub(pattern, f'[{instruction}]', lyrics_text, flags=re.IGNORECASE)
+    
+    return lyrics_text
+
+def validate_band_names(text: str) -> str:
+    """
+    Validiert und korrigiert Bandnamen in Texten:
+    - Ersetzt Bandnamen durch [inspiration]
+    - Erlaubt die Nennung von Bandmitgliedern
+    """
+    # Ersetze "the" gefolgt von einem oder mehreren Wörtern durch [inspiration]
+    text = re.sub(r'\bthe\s+[a-zA-Z\s&]+(?:s)?\b', '[inspiration]', text, flags=re.IGNORECASE)
+    
+    # Ersetze einzelne oder mehrere Wörter, die auf "band", "group" oder ähnliches enden
+    text = re.sub(r'\b[a-zA-Z\s&]+(?:band|group|collective|ensemble)\b', '[inspiration]', text, flags=re.IGNORECASE)
+    
+    # Ersetze bekannte Bandnamen-Muster (z.B. "Band A & Band B")
+    text = re.sub(r'\b[a-zA-Z\s&]+(?:and|&)\s+[a-zA-Z\s&]+\b', '[inspiration]', text, flags=re.IGNORECASE)
+    
+    return text
 
 def main():
     """Hauptfunktion zum Starten der Anwendung."""
